@@ -1,64 +1,51 @@
-const PROVIDERS = {
-  claude: {
-    name: "Claude (Anthropic)",
-    endpoint: "https://api.anthropic.com/v1/messages",
-    model: "claude-sonnet-4-20250514",
-    buildRequest: (prompt, apiKey) => ({
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
-    }),
-    parseResponse: (data) => data.content?.[0]?.text || "No response generated.",
-  },
-  gemini: {
-    name: "Gemini (Google)",
-    endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-    model: "gemini-2.0-flash",
-    buildRequest: (prompt, apiKey) => ({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    }),
-    getUrl: (apiKey) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.",
-  },
-  ollama: {
-    name: "Ollama (Local)",
-    endpoint: "http://localhost:11434/api/generate",
-    model: "qwen3:8b",
-    buildRequest: (prompt, _apiKey, model) => ({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: model || "qwen3:8b", prompt, stream: false }),
-    }),
-    parseResponse: (data) => data.response || "No response generated.",
-  },
-};
+const APERTURE_BASE = "/ai";
 
-export async function queryAI(provider, prompt, apiKey, model) {
-  const p = PROVIDERS[provider];
-  if (!p) throw new Error(`Unknown provider: ${provider}`);
-  
-  const systemPrompt = `You are an AI fleet operations intelligence system for Row64. You analyze vehicle incidents, location data, and operational metrics to provide prescriptive recommendations. Be specific about locations, distances, nearby facilities, and actionable next steps. Keep responses concise and structured with INCIDENT BRIEF and NEXT BEST ACTION sections. Use markdown bold for section headers.`;
-  const fullPrompt = `${systemPrompt}\n\n${prompt}`;
-  
-  try {
-    const config = p.buildRequest(fullPrompt, apiKey, model);
-    const url = p.getUrl ? p.getUrl(apiKey) : p.endpoint;
-    const response = await fetch(url, config);
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`${p.name} API error (${response.status}): ${err.slice(0, 200)}`);
+const MODEL_PRIORITY = [
+  { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash-Lite", provider: "google" },
+  { id: "gemini-3-flash-preview", label: "Gemini 3 Flash", provider: "google" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "google" },
+  { id: "llama3.1:8b", label: "Llama 3.1 8B", provider: "ollama" },
+  { id: "qwen3.5:9b-fast", label: "Qwen 3.5 Fast", provider: "ollama" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6", provider: "anthropic" },
+];
+
+const SYSTEM_PROMPT = `You are an AI fleet operations intelligence system for Row64. You analyze vehicle incidents, location data, and operational metrics to provide prescriptive recommendations. Be specific about locations, distances, nearby facilities, and actionable next steps. Keep responses concise and structured with INCIDENT BRIEF and NEXT BEST ACTION sections. Use markdown bold for section headers.`;
+
+export async function queryAI(prompt, preferredModel) {
+  const models = preferredModel
+    ? [preferredModel, ...MODEL_PRIORITY.map(m => m.id).filter(m => m !== preferredModel)]
+    : MODEL_PRIORITY.map(m => m.id);
+
+  for (const model of models) {
+    try {
+      const response = await fetch(`${APERTURE_BASE}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer -" },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content || null;
+      if (text) return { model, text };
+    } catch {
+      continue;
     }
-    const data = await response.json();
-    return p.parseResponse(data);
-  } catch (error) {
-    return `Error from ${p.name}: ${error.message}`;
   }
+
+  return { model: null, text: "All AI models unavailable. Check Aperture gateway status." };
 }
 
-export function getProviderList() {
-  return Object.entries(PROVIDERS).map(([key, val]) => ({ key, name: val.name, model: val.model }));
+export function getModelList() {
+  return MODEL_PRIORITY;
 }
 
-export default PROVIDERS;
+export default { queryAI, getModelList };

@@ -6,11 +6,10 @@ import AIPanel from "../components/AIPanel";
 import RightPanel from "../components/RightPanel";
 import { FLEET_SIZE, ROUTES } from "../data/fleet";
 
-export default function DashboardTab({ fleet, tick, aiProvider, aiApiKey, aiModel }) {
+export default function DashboardTab({ fleet, tick, aiEnabled, aiModel }) {
   const [selected, setSelected] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const handleSelect = (v) => { setSelected(v); setShowAI(false); };
-  // keep selected in sync
   const sel = selected ? fleet.find(v=>v.id===selected.id) || null : null;
 
   return <div style={{width:"100%",height:"100%",background:"#fff",borderRadius:4,border:"2px dashed #0078D4",display:"flex",flexDirection:"column",gap:8,padding:12,overflow:"hidden"}}>
@@ -22,8 +21,8 @@ export default function DashboardTab({ fleet, tick, aiProvider, aiApiKey, aiMode
           {[["Transit","#10b981"],["Delayed","#ef4444"],["Dock","#f59e0b"],["Maint.","#6b7280"]].map(([l,c])=><div key={l} style={{display:"flex",alignItems:"center",gap:3,fontSize:9,color:"#555"}}><div style={{width:7,height:7,borderRadius:"50%",background:c}}/>{l}</div>)}
         </div>
         <div style={{position:"absolute",bottom:10,left:10,fontSize:9,color:"#999",fontFamily:"monospace",zIndex:1000,background:"rgba(255,255,255,0.85)",padding:"2px 8px",borderRadius:3}}>{FLEET_SIZE} vehicles · {ROUTES.length} routes · tick {tick}</div>
-        {sel && !showAI && <TruckPopup vehicle={sel} onClose={()=>setSelected(null)} onShowAI={()=>setShowAI(true)}/>}
-        {sel && showAI && <AIPanel vehicle={sel} onClose={()=>{setShowAI(false);setSelected(null);}} onBack={()=>setShowAI(false)} aiProvider={aiProvider} aiApiKey={aiApiKey} aiModel={aiModel}/>}
+        {sel && !showAI && <TruckPopup vehicle={sel} onClose={()=>setSelected(null)} onShowAI={aiEnabled ? ()=>setShowAI(true) : undefined}/>}
+        {sel && showAI && <AIPanel vehicle={sel} onClose={()=>{setShowAI(false);setSelected(null);}} onBack={()=>setShowAI(false)} aiEnabled={aiEnabled} aiModel={aiModel}/>}
         <FleetMap fleet={fleet} selected={sel} onSelect={handleSelect}/>
       </div>
       <RightPanel fleet={fleet}/>
@@ -33,7 +32,7 @@ export default function DashboardTab({ fleet, tick, aiProvider, aiApiKey, aiMode
         <div style={{background:"#f0f2f8",border:"1px solid #dde",borderRadius:3,padding:"3px 8px",fontSize:10,color:"#666"}}>Dash1</div>
         <div style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",background:"#f0f2f8",border:"1px solid #dde",borderRadius:3,cursor:"pointer",color:"#0078D4",fontSize:14,fontWeight:700}}>+</div>
       </div>
-      <div style={{fontSize:10,color:"#aaa",display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:"50%",background:"#10b981"}}/>Ready</div>
+      <div style={{fontSize:10,color:"#aaa",display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:"50%",background:aiEnabled?"#10b981":"#6b7280"}}/>{ aiEnabled ? "AI Ready" : "AI Off"}</div>
     </div>
   </div>;
 }

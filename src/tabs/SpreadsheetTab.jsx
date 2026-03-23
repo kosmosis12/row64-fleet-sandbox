@@ -1,48 +1,311 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
+import {
+  createColumnHelper,
+  getCoreRowModel,
+  useReactTable,
+  flexRender,
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
-const COLS = ["A","B","C","D","E","F","G","H","I","J","K"];
-const ROWS = 30;
+const TOTAL_ROWS = 500;
+const COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"];
+const colHelper = createColumnHelper();
 
 export default function SpreadsheetTab() {
-  const [cells, setCells] = useState({});
-  const [active, setActive] = useState(null);
+  const [data, setData] = useState(() =>
+    Array.from({ length: TOTAL_ROWS }, (_, i) => {
+      const row = { _rowNum: i + 1 };
+      COLS.forEach((c) => (row[c] = ""));
+      return row;
+    })
+  );
+  const [activeCell, setActiveCell] = useState(null);
+  const scrollRef = useRef(null);
 
-  const cellKey = (r,c) => `${c}${r}`;
-  const handleChange = useCallback((r,c,val) => setCells(prev => ({...prev,[cellKey(r,c)]:val})), []);
+  const updateCell = useCallback((rowIdx, colId, value) => {
+    setData((prev) => {
+      const next = [...prev];
+      next[rowIdx] = { ...next[rowIdx], [colId]: value };
+      return next;
+    });
+  }, []);
 
-  return <div style={{width:"100%",height:"100%",background:"#fff",borderRadius:4,border:"2px dashed #0078D4",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-    {/* Toolbar */}
-    <div style={{height:36,background:"#f8f9fc",display:"flex",alignItems:"center",padding:"0 8px",gap:4,borderBottom:"1px solid #e8eaef",flexShrink:0}}>
-      <div style={{background:"#0078D4",color:"#fff",padding:"4px 10px",borderRadius:3,fontSize:10,fontWeight:800,letterSpacing:"0.06em",marginRight:8}}>SPREADSHEET</div>
-      {["New","Set Area"].map(l=><button key={l} style={{background:"transparent",border:"none",color:"#444",padding:"4px 8px",fontSize:11,cursor:"pointer",fontWeight:500}}>{l}</button>)}
-      <div style={{width:1,height:20,background:"#ddd",margin:"0 4px"}}/>
-      {["B","I","U"].map(l=><button key={l} style={{width:28,height:28,background:"transparent",border:"1px solid #ddd",borderRadius:3,color:"#333",fontSize:12,fontWeight:l==="B"?800:l==="I"?400:400,fontStyle:l==="I"?"italic":"normal",textDecoration:l==="U"?"underline":"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{l}</button>)}
-      <div style={{width:1,height:20,background:"#ddd",margin:"0 4px"}}/>
-      {["Wrap Text","Format Cells","Merge","Unmerge"].map(l=><button key={l} style={{background:"transparent",border:"none",color:"#666",padding:"4px 8px",fontSize:10,cursor:"pointer"}}>{l}</button>)}
+  const columns = useMemo(
+    () => [
+      colHelper.display({
+        id: "_rowNum",
+        header: "",
+        size: 44,
+        cell: (info) => (
+          <div
+            style={{
+              fontSize: 10,
+              color: "#888",
+              textAlign: "center",
+              fontWeight: 500,
+              background: info.row.index % 2 === 0 ? "#fafbfc" : "#f0f2f8",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {info.row.index + 1}
+          </div>
+        ),
+      }),
+      ...COLS.map((c) =>
+        colHelper.accessor(c, {
+          header: c,
+          size: 100,
+          cell: (info) => {
+            const key = `${info.row.index}-${c}`;
+            const isActive = activeCell === key;
+            return (
+              <input
+                value={info.getValue() || ""}
+                onChange={(e) =>
+                  updateCell(info.row.index, c, e.target.value)
+                }
+                onFocus={() => setActiveCell(key)}
+                onBlur={() => setActiveCell(null)}
+                style={{
+                  width: "100%",
+                  height: 28,
+                  border: "none",
+                  outline: isActive ? "2px solid #0078D4" : "none",
+                  outlineOffset: -2,
+                  padding: "2px 6px",
+                  fontSize: 11,
+                  fontFamily: "'Segoe UI',sans-serif",
+                  background: isActive
+                    ? "#e8f0fe"
+                    : info.row.index % 2 === 0
+                    ? "#fafbfc"
+                    : "#fff",
+                  boxSizing: "border-box",
+                }}
+              />
+            );
+          },
+        })
+      ),
+    ],
+    [activeCell, updateCell]
+  );
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  const { rows } = table.getRowModel();
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 30,
+    overscan: 15,
+  });
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        background: "#fff",
+        borderRadius: 4,
+        border: "2px dashed #0078D4",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
+      {/* Toolbar */}
+      <div
+        style={{
+          height: 36,
+          background: "#f8f9fc",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 8px",
+          gap: 4,
+          borderBottom: "1px solid #e8eaef",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            background: "#0078D4",
+            color: "#fff",
+            padding: "4px 10px",
+            borderRadius: 3,
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.06em",
+            marginRight: 8,
+          }}
+        >
+          SPREADSHEET
+        </div>
+        <div
+          style={{
+            fontSize: 9,
+            color: "#888",
+            fontFamily: "monospace",
+            marginLeft: "auto",
+          }}
+        >
+          {TOTAL_ROWS} rows × {COLS.length} cols · TanStack Virtual
+        </div>
+      </div>
+      {/* Virtualized Grid */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: "auto" }}>
+        <table
+          style={{
+            borderCollapse: "collapse",
+            width: "100%",
+            tableLayout: "fixed",
+          }}
+        >
+          <thead>
+            <tr>
+              {table.getHeaderGroups().map((hg) =>
+                hg.headers.map((h) => (
+                  <th
+                    key={h.id}
+                    style={{
+                      width: h.getSize(),
+                      background: "#f0f2f8",
+                      border: "1px solid #e0e0e8",
+                      padding: "4px",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#555",
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 2,
+                    }}
+                  >
+                    {h.isPlaceholder
+                      ? null
+                      : flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                ))
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {/* Spacer before visible rows */}
+            {virtualizer.getVirtualItems().length > 0 && (
+              <tr>
+                <td
+                  style={{
+                    height: virtualizer.getVirtualItems()[0]?.start ?? 0,
+                    padding: 0,
+                    border: "none",
+                  }}
+                  colSpan={columns.length}
+                />
+              </tr>
+            )}
+            {virtualizer.getVirtualItems().map((vRow) => {
+              const row = rows[vRow.index];
+              return (
+                <tr key={row.id} data-index={vRow.index}>
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      style={{
+                        border: "1px solid #e0e0e8",
+                        padding: 0,
+                        width: cell.column.getSize(),
+                      }}
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            {/* Spacer after visible rows */}
+            {virtualizer.getVirtualItems().length > 0 && (
+              <tr>
+                <td
+                  style={{
+                    height:
+                      virtualizer.getTotalSize() -
+                      (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
+                    padding: 0,
+                    border: "none",
+                  }}
+                  colSpan={columns.length}
+                />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {/* Bottom tabs */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "4px 8px",
+          borderTop: "1px solid #e8eaef",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            background: "#f0f2f8",
+            border: "1px solid #dde",
+            borderRadius: 3,
+            padding: "3px 8px",
+            fontSize: 10,
+            color: "#666",
+          }}
+        >
+          Dash1
+        </div>
+        <div
+          style={{
+            background: "#d0e4f8",
+            border: "1px solid #aac8e8",
+            borderRadius: 3,
+            padding: "3px 8px",
+            fontSize: 10,
+            color: "#0078D4",
+            fontWeight: 600,
+          }}
+        >
+          Sheet2
+        </div>
+        <div
+          style={{
+            width: 22,
+            height: 22,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#f0f2f8",
+            border: "1px solid #dde",
+            borderRadius: 3,
+            cursor: "pointer",
+            color: "#0078D4",
+            fontSize: 14,
+            fontWeight: 700,
+          }}
+        >
+          +
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 10, color: "#aaa" }}>Ready</div>
+      </div>
     </div>
-    {/* Grid */}
-    <div style={{flex:1,overflow:"auto"}}>
-      <table style={{borderCollapse:"collapse",width:"100%",tableLayout:"fixed"}}>
-        <thead><tr>
-          <th style={{width:40,background:"#f0f2f8",border:"1px solid #e0e0e8",padding:"4px",fontSize:10,color:"#888",position:"sticky",top:0,zIndex:2}}/>
-          {COLS.map(c=><th key={c} style={{width:100,background:"#f0f2f8",border:"1px solid #e0e0e8",padding:"4px",fontSize:10,fontWeight:600,color:"#555",position:"sticky",top:0,zIndex:2}}>{c}</th>)}
-        </tr></thead>
-        <tbody>{Array.from({length:ROWS},(_,r)=>r+1).map(r=>
-          <tr key={r}>{[<td key="h" style={{background:r%2===0?"#fafbfc":"#f0f2f8",border:"1px solid #e0e0e8",padding:"2px 4px",fontSize:10,color:"#888",textAlign:"center",fontWeight:500}}>{r}</td>,
-          ...COLS.map(c=><td key={c} style={{border:"1px solid #e0e0e8",padding:0,background:active===cellKey(r,c)?"#e8f0fe":r%2===0?"#fafbfc":"#fff"}}>
-            <input value={cells[cellKey(r,c)]||""} onChange={e=>handleChange(r,c,e.target.value)} onFocus={()=>setActive(cellKey(r,c))} onBlur={()=>setActive(null)}
-              style={{width:"100%",height:24,border:"none",outline:"none",padding:"2px 4px",fontSize:11,fontFamily:"'Segoe UI',sans-serif",background:"transparent"}}/>
-          </td>)]}</tr>
-        )}</tbody>
-      </table>
-    </div>
-    {/* Bottom tabs */}
-    <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderTop:"1px solid #e8eaef",flexShrink:0}}>
-      <div style={{background:"#f0f2f8",border:"1px solid #dde",borderRadius:3,padding:"3px 8px",fontSize:10,color:"#666"}}>Dash1</div>
-      <div style={{background:"#d0e4f8",border:"1px solid #aac8e8",borderRadius:3,padding:"3px 8px",fontSize:10,color:"#0078D4",fontWeight:600}}>Sheet2</div>
-      <div style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",background:"#f0f2f8",border:"1px solid #dde",borderRadius:3,cursor:"pointer",color:"#0078D4",fontSize:14,fontWeight:700}}>+</div>
-      <div style={{flex:1}}/>
-      <div style={{fontSize:10,color:"#aaa"}}>Ready</div>
-    </div>
-  </div>;
+  );
 }
