@@ -1,73 +1,228 @@
-import { useState } from "react";
-import Sparkline from "../components/Sparkline";
-import DonutChart from "../components/DonutChart";
-import { sparkData } from "../data/fleet";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 const CHART_TYPES = [
-  { id:"scatter", icon:"⁞⁞", label:"New Scatter" },
-  { id:"line", icon:"📈", label:"New Line" },
-  { id:"bar", icon:"📊", label:"New Bar" },
-  { id:"hbar", icon:"☰", label:"New HBar" },
-  { id:"pie", icon:"🥧", label:"New Pie" },
-  { id:"venn", icon:"◎", label:"New Venn" },
-  { id:"geo", icon:"📍", label:"Geo 2D" },
-  { id:"bubble", icon:"◉", label:"New Bubble" },
-  { id:"wordcloud", icon:"🔤", label:"Word Cloud" },
+  { id: "bar", icon: "/icons/bar-chart.png", label: "Bar Chart" },
+  { id: "line", icon: "/icons/line-chart.png", label: "Line Chart" },
+  { id: "pie", icon: "/icons/bar-chart.png", label: "Pie Chart" },
+  { id: "scatter", icon: "/icons/scatter.png", label: "Scatter Plot" },
+  { id: "area", icon: "/icons/area-chart.png", label: "Area Chart" },
+  { id: "hbar", icon: "/icons/bar-chart.png", label: "Horizontal Bar" },
 ];
 
-const sampleData1 = sparkData(12, 200, 40);
-const sampleData2 = sparkData(12, 150, 30);
-const sampleData3 = sparkData(12, 100, 25);
-const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const SAMPLE_DATA = {
+  bar: { labels: ["Q1", "Q2", "Q3", "Q4"], values: [2400, 1800, 3200, 2900], colors: ["#0078D4", "#00B4D8", "#0096C7", "#023E8A"] },
+  line: { labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], values: [120, 190, 150, 220, 280, 310], colors: ["#0078D4"] },
+  pie: { labels: ["Active", "Idle", "Maintenance", "Offline"], values: [45, 25, 18, 12], colors: ["#10b981", "#f59e0b", "#6366f1", "#ef4444"] },
+  scatter: { points: Array.from({ length: 40 }, () => ({ x: Math.random() * 100, y: Math.random() * 100 })), colors: ["#0078D4"] },
+  area: { labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], values: [30, 45, 28, 55, 43, 65, 50], colors: ["#0078D4"] },
+  hbar: { labels: ["Route A", "Route B", "Route C", "Route D", "Route E"], values: [87, 73, 92, 61, 78], colors: ["#10b981", "#0078D4", "#6366f1", "#f59e0b", "#ef4444"] },
+};
 
-function SampleBarChart() {
-  const max = Math.max(...sampleData1);
-  return <div style={{padding:20}}>
-    <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:12}}>Monthly Fleet Utilization</div>
-    <div style={{display:"flex",alignItems:"flex-end",gap:6,height:150}}>
-      {sampleData1.map((d,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-        <span style={{fontSize:8,color:"#888"}}>{d.toFixed(0)}</span>
-        <div style={{width:"100%",height:`${(d/max)*120}px`,background:i===11?"#0078D4":"#93c5fd",borderRadius:"3px 3px 0 0",transition:"height 0.3s"}}/>
-        <span style={{fontSize:8,color:"#999"}}>{months[i]}</span>
-      </div>)}
-    </div>
-  </div>;
+function CanvasChart({ type, width, height }) {
+  const canvasRef = useRef(null);
+  const data = SAMPLE_DATA[type];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !data) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const pad = { top: 30, right: 20, bottom: 40, left: 50 };
+    const cw = width - pad.left - pad.right;
+    const ch = height - pad.top - pad.bottom;
+
+    // Grid + axis styling
+    ctx.strokeStyle = "#e8eaef";
+    ctx.lineWidth = 0.5;
+    ctx.font = "10px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#999";
+
+    if (type === "bar") {
+      const max = Math.max(...data.values) * 1.15;
+      const bw = cw / data.labels.length * 0.6;
+      const gap = cw / data.labels.length * 0.4;
+      // Grid
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + ch - (ch * i / 4);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+        ctx.fillText(Math.round(max * i / 4), 5, y + 4);
+      }
+      // Bars
+      data.values.forEach((v, i) => {
+        const x = pad.left + i * (bw + gap) + gap / 2;
+        const bh = (v / max) * ch;
+        const y = pad.top + ch - bh;
+        ctx.fillStyle = data.colors[i % data.colors.length];
+        ctx.beginPath();
+        ctx.roundRect(x, y, bw, bh, [4, 4, 0, 0]);
+        ctx.fill();
+        ctx.fillStyle = "#666";
+        ctx.textAlign = "center";
+        ctx.fillText(data.labels[i], x + bw / 2, pad.top + ch + 18);
+        ctx.fillStyle = "#333";
+        ctx.font = "bold 11px 'Segoe UI', sans-serif";
+        ctx.fillText(v.toLocaleString(), x + bw / 2, y - 6);
+        ctx.font = "10px 'Segoe UI', sans-serif";
+      });
+    } else if (type === "line" || type === "area") {
+      const max = Math.max(...data.values) * 1.2;
+      const step = cw / (data.labels.length - 1);
+      // Grid
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + ch - (ch * i / 4);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+        ctx.fillStyle = "#999"; ctx.fillText(Math.round(max * i / 4), 5, y + 4);
+      }
+      // Area fill
+      if (type === "area") {
+        ctx.beginPath();
+        ctx.moveTo(pad.left, pad.top + ch);
+        data.values.forEach((v, i) => {
+          ctx.lineTo(pad.left + i * step, pad.top + ch - (v / max) * ch);
+        });
+        ctx.lineTo(pad.left + (data.values.length - 1) * step, pad.top + ch);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+        grad.addColorStop(0, "rgba(0,120,212,0.25)");
+        grad.addColorStop(1, "rgba(0,120,212,0.02)");
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+      // Line
+      ctx.beginPath();
+      ctx.strokeStyle = data.colors[0];
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = "round";
+      data.values.forEach((v, i) => {
+        const x = pad.left + i * step;
+        const y = pad.top + ch - (v / max) * ch;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      // Dots + labels
+      data.values.forEach((v, i) => {
+        const x = pad.left + i * step;
+        const y = pad.top + ch - (v / max) * ch;
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = data.colors[0]; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+        ctx.fillStyle = "#666"; ctx.textAlign = "center"; ctx.fillText(data.labels[i], x, pad.top + ch + 18);
+      });
+    } else if (type === "pie") {
+      const total = data.values.reduce((a, b) => a + b, 0);
+      const cx = width / 2;
+      const cy = height / 2;
+      const r = Math.min(cw, ch) / 2.5;
+      let angle = -Math.PI / 2;
+      data.values.forEach((v, i) => {
+        const slice = (v / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, angle, angle + slice);
+        ctx.closePath();
+        ctx.fillStyle = data.colors[i];
+        ctx.fill();
+        // Label
+        const mid = angle + slice / 2;
+        const lx = cx + Math.cos(mid) * (r + 24);
+        const ly = cy + Math.sin(mid) * (r + 24);
+        ctx.fillStyle = "#333";
+        ctx.font = "bold 11px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`${data.labels[i]} (${Math.round(v / total * 100)}%)`, lx, ly);
+        ctx.font = "10px 'Segoe UI', sans-serif";
+        angle += slice;
+      });
+      // Inner circle for donut effect
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+      ctx.fillStyle = "#333"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(total, cx, cy + 6);
+    } else if (type === "scatter") {
+      // Grid
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + ch - (ch * i / 4);
+        const x = pad.left + (cw * i / 4);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + ch); ctx.stroke();
+        ctx.fillStyle = "#999";
+        ctx.fillText(Math.round(100 * i / 4), 5, y + 4);
+        ctx.textAlign = "center"; ctx.fillText(Math.round(100 * i / 4), x, pad.top + ch + 18); ctx.textAlign = "start";
+      }
+      // Points
+      data.points.forEach((p) => {
+        const x = pad.left + (p.x / 100) * cw;
+        const y = pad.top + ch - (p.y / 100) * ch;
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,120,212,0.5)"; ctx.fill();
+        ctx.strokeStyle = "rgba(0,120,212,0.8)"; ctx.lineWidth = 1; ctx.stroke();
+      });
+    } else if (type === "hbar") {
+      const max = Math.max(...data.values) * 1.15;
+      const bh = ch / data.labels.length * 0.65;
+      const gap = ch / data.labels.length * 0.35;
+      data.values.forEach((v, i) => {
+        const y = pad.top + i * (bh + gap) + gap / 2;
+        const bw2 = (v / max) * cw;
+        ctx.fillStyle = data.colors[i % data.colors.length];
+        ctx.beginPath();
+        ctx.roundRect(pad.left, y, bw2, bh, [0, 4, 4, 0]);
+        ctx.fill();
+        ctx.fillStyle = "#666"; ctx.textAlign = "right";
+        ctx.fillText(data.labels[i], pad.left - 6, y + bh / 2 + 4);
+        ctx.fillStyle = "#333"; ctx.font = "bold 11px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+        ctx.fillText(`${v}%`, pad.left + bw2 + 6, y + bh / 2 + 4);
+        ctx.font = "10px 'Segoe UI', sans-serif";
+      });
+    }
+  }, [type, width, height, data]);
+
+  return <canvas ref={canvasRef} style={{ width, height }} />;
 }
 
-function SampleLineChart() {
-  const w=400,h=150,mx=Math.max(...sampleData2,...sampleData3),mn=Math.min(...sampleData2,...sampleData3),r=mx-mn||1;
-  const toPoints=(data)=>data.map((d,i)=>`${(i/(data.length-1))*w},${h-10-((d-mn)/r)*(h-20)}`).join(" ");
-  return <div style={{padding:20}}>
-    <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:12}}>Speed vs Fuel Efficiency Trend</div>
-    <svg width={w} height={h}><polyline points={toPoints(sampleData2)} fill="none" stroke="#0078D4" strokeWidth="2"/><polyline points={toPoints(sampleData3)} fill="none" stroke="#10b981" strokeWidth="2"/></svg>
-    <div style={{display:"flex",gap:16,marginTop:6}}><div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#666"}}><div style={{width:12,height:3,background:"#0078D4",borderRadius:2}}/>Avg Speed</div><div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#666"}}><div style={{width:12,height:3,background:"#10b981",borderRadius:2}}/>Fuel Eff.</div></div>
-  </div>;
-}
+export default function ChartTab({ onMarkDirty }) {
+  const [selectedType, setSelectedType] = useState("bar");
+  const [chartTitle, setChartTitle] = useState("Fleet Analytics");
+  const containerRef = useRef(null);
+  const [dims, setDims] = useState({ w: 600, h: 400 });
 
-function SamplePieChart() {
-  return <div style={{padding:20,display:"flex",alignItems:"center",gap:24}}>
-    <div><div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:12}}>Fleet by Cargo Type</div>
-      <DonutChart data={[{value:35,color:"#0078D4"},{value:25,color:"#10b981"},{value:20,color:"#f59e0b"},{value:15,color:"#8b5cf6"},{value:5,color:"#ef4444"}]} size={140}/>
-    </div>
-    <div style={{fontSize:10,display:"flex",flexDirection:"column",gap:6}}>
-      {[["Electronics",35,"#0078D4"],["Perishables",25,"#10b981"],["Heavy Haul",20,"#f59e0b"],["Auto Parts",15,"#8b5cf6"],["Medical",5,"#ef4444"]].map(([l,v,c])=>
-        <div key={l} style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:c}}/><span style={{color:"#666"}}>{l}</span><span style={{fontWeight:700,color:"#333"}}>{v}%</span></div>)}
-    </div>
-  </div>;
-}
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        setDims({ w: Math.floor(e.contentRect.width) - 32, h: Math.floor(e.contentRect.height) - 60 });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-const SAMPLES = { scatter:<SampleLineChart/>, line:<SampleLineChart/>, bar:<SampleBarChart/>, hbar:<SampleBarChart/>, pie:<SamplePieChart/>, venn:<SamplePieChart/>, geo:<div style={{padding:40,textAlign:"center",color:"#aaa"}}>Geo 2D — see Dashboard tab for live map</div>, bubble:<SampleLineChart/>, wordcloud:<div style={{padding:40,textAlign:"center",color:"#aaa",fontSize:11}}>Word Cloud — requires text data source</div> };
-
-export default function ChartTab() {
-  const [selected, setSelected] = useState("bar");
-  return <div style={{width:"100%",height:"100%",background:"#fff",borderRadius:4,border:"2px dashed #0078D4",display:"flex",overflow:"hidden"}}>
-    <div style={{width:200,background:"#f8f9fc",borderRight:"1px solid #e8eaef",padding:8}}>
-      <div style={{background:"#0078D4",color:"#fff",padding:"4px 10px",borderRadius:3,fontSize:10,fontWeight:800,letterSpacing:"0.06em",marginBottom:12,display:"inline-block"}}>NO CHART SELECTED</div>
-      <div style={{padding:"8px 12px",fontSize:12,fontWeight:600,color:"#333",marginBottom:4}}>New Chart</div>
-      {CHART_TYPES.map(ct=><div key={ct.id} onClick={()=>setSelected(ct.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:4,cursor:"pointer",background:selected===ct.id?"#e8f0fe":"transparent",transition:"background 0.12s",marginBottom:1}} onMouseEnter={e=>{if(selected!==ct.id)e.currentTarget.style.background="#eef0f5"}} onMouseLeave={e=>{if(selected!==ct.id)e.currentTarget.style.background="transparent"}}>
-        <span style={{fontSize:16,width:20,textAlign:"center"}}>{ct.icon}</span><span style={{fontSize:11,color:"#444",fontWeight:500}}>{ct.label}</span>
-      </div>)}
+  return (
+    <div style={{ width: "100%", height: "100%", background: "#fff", borderRadius: 4, border: "2px dashed #0078D4", display: "flex", overflow: "hidden" }}>
+      <div style={{ width: 180, background: "#f8f9fc", borderRight: "1px solid #e8eaef", padding: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#888", letterSpacing: "0.06em", padding: "4px 8px", marginBottom: 4 }}>CHART TYPE</div>
+        {CHART_TYPES.map((ct) => (
+          <div key={ct.id} onClick={() => { setSelectedType(ct.id); if (onMarkDirty) onMarkDirty(); }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 4, cursor: "pointer", background: selectedType === ct.id ? "#e8f0fe" : "transparent", fontWeight: selectedType === ct.id ? 600 : 400, transition: "all 0.12s", fontSize: 12, color: selectedType === ct.id ? "#0078D4" : "#555" }}
+            onMouseEnter={(e) => { if (selectedType !== ct.id) e.currentTarget.style.background = "#eef0f5"; }}
+            onMouseLeave={(e) => { if (selectedType !== ct.id) e.currentTarget.style.background = "transparent"; }}>
+            <img src={ct.icon} alt={ct.label} width={18} height={18} style={{objectFit:"contain"}} /> {ct.label}
+          </div>
+        ))}
+        <div style={{ marginTop: "auto", padding: 8 }}>
+          <label style={{ fontSize: 10, fontWeight: 600, color: "#888", display: "block", marginBottom: 4 }}>Title</label>
+          <input value={chartTitle} onChange={(e) => setChartTitle(e.target.value)}
+            style={{ width: "100%", padding: "5px 8px", border: "1px solid #ddd", borderRadius: 3, fontSize: 11, boxSizing: "border-box" }} />
+        </div>
+      </div>
+      <div ref={containerRef} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#333", marginBottom: 8 }}>{chartTitle}</div>
+        {dims.w > 100 && <CanvasChart type={selectedType} width={Math.min(dims.w, 700)} height={Math.min(dims.h, 500)} />}
+      </div>
     </div>
-    <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>{SAMPLES[selected]||<div style={{color:"#ccc"}}>Select a chart type</div>}</div>
-  </div>;
+  );
 }
