@@ -44,3 +44,13 @@ export function generateFleet() {
 }
 export function sparkData(n=20,b=50,v=15){const d=[b];for(let i=1;i<n;i++)d.push(Math.max(0,d[i-1]+(Math.random()-0.48)*v));return d;}
 export const statusColor = s => s==="Delayed"?"#ef4444":s==="In Transit"?"#10b981":s==="At Dock"?"#f59e0b":"#6b7280";
+
+export function tickFleet(fleet) {
+  return fleet.map(truck => {
+    const p = truck.progress + 0.002 + Math.random() * 0.003;
+    if (p >= 1) return { ...truck, progress: 0 };
+    const pos = interpolateRoute(ROUTES[truck.routeIdx], p);
+    return { ...truck, progress: p, lat: pos[1], lng: pos[0], speed: 45 + Math.random() * 25 };
+  });
+}
+
