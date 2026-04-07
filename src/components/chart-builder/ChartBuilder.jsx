@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { useChartData, COLUMN_DEFS } from "./useChartData";
 import ConfigPanel from "./ConfigPanel";
 import ChartRenderer from "./ChartRenderer";
+import CopilotDrawer from "./CopilotDrawer";
 
 const colLabel = (k) => COLUMN_DEFS.find((c) => c.key === k)?.label ?? k;
 
 export default function ChartBuilder({ onMarkDirty }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [config, setConfig] = useState({
     chartType: "bar",
     x: "status",
@@ -81,6 +83,21 @@ export default function ChartBuilder({ onMarkDirty }) {
               {points.length} series points · {rowCount} source rows · live preview
             </div>
           </div>
+          <button
+            onClick={() => setCopilotOpen((v) => !v)}
+            title="Toggle AI Copilot"
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 20,
+              background: copilotOpen ? "#0078D4" : "#f0f1f3",
+              color: copilotOpen ? "#ffffff" : "#1a1a2e",
+              border: `1px solid ${copilotOpen ? "#0078D4" : "#d0d0d8"}`,
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.05em",
+              cursor: "pointer",
+            }}
+          >
+            ✨ AI {copilotOpen ? "ON" : "OFF"}
+          </button>
         </div>
         <div style={{ flex: 1, background: "#fafbfc", border: "1px solid #e0e0e8", borderRadius: 3, padding: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
           <ChartRenderer
@@ -93,6 +110,12 @@ export default function ChartBuilder({ onMarkDirty }) {
           />
         </div>
       </div>
+
+      <CopilotDrawer
+        open={copilotOpen}
+        config={config}
+        setConfig={handleConfig}
+      />
     </div>
   );
 }
