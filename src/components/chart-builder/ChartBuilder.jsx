@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { useChartData, COLUMN_DEFS } from "./useChartData";
 import ConfigPanel from "./ConfigPanel";
 import ChartRenderer from "./ChartRenderer";
+import CopilotDrawer from "./CopilotDrawer";
 
 const colLabel = (k) => COLUMN_DEFS.find((c) => c.key === k)?.label ?? k;
 
 export default function ChartBuilder({ onMarkDirty }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [config, setConfig] = useState({
     chartType: "bar",
     x: "status",
@@ -81,6 +83,24 @@ export default function ChartBuilder({ onMarkDirty }) {
               {points.length} series points · {rowCount} source rows · live preview
             </div>
           </div>
+          <button
+            onClick={() => setCopilotOpen((v) => !v)}
+            title="Toggle AI Copilot"
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 10px", borderRadius: 20,
+              border: "1px solid " + (copilotOpen ? "#10b981" : "#3a3a52"),
+              background: copilotOpen ? "rgba(16,185,129,0.12)" : "#252538",
+              color: copilotOpen ? "#10b981" : "#cfcfe0",
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", cursor: "pointer",
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: copilotOpen ? "#10b981" : "#6b6b85",
+            }} />
+            AI {copilotOpen ? "ON" : "OFF"}
+          </button>
         </div>
         <div style={{ flex: 1, background: "#181826", border: "1px solid #2a2a3e", borderRadius: 3, padding: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
           <ChartRenderer
@@ -93,6 +113,13 @@ export default function ChartBuilder({ onMarkDirty }) {
           />
         </div>
       </div>
+
+      {copilotOpen && (
+        <CopilotDrawer
+          onApplyConfig={(cfg) => handleConfig({ ...config, ...cfg })}
+          onClose={() => setCopilotOpen(false)}
+        />
+      )}
     </div>
   );
 }
