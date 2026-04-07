@@ -8,6 +8,7 @@ import ChartTab from "./tabs/ChartTab";
 import SpreadsheetTab from "./tabs/SpreadsheetTab";
 import FleetTableTab from "./tabs/FleetTableTab";
 import FileTab from "./tabs/FileTab";
+import ChartBuilder from "./components/chart-builder/ChartBuilder";
 
 const R64Logo = () => (
   <svg width="28" height="20" viewBox="0 0 28 20">
@@ -80,6 +81,7 @@ export default function App() {
     File: <FileTab project={project} />,
     Data: <DataTab onMarkDirty={project.markDirty} />,
     Chart: <ChartTab onMarkDirty={project.markDirty} />,
+    "Chart Builder": <ChartBuilder onMarkDirty={project.markDirty} />,
     Spreadsheet: <SpreadsheetTab onMarkDirty={project.markDirty} />,
     "Fleet Table": <FleetTableTab fleet={fleet} />,
     Dashboard: <DashboardTab fleet={fleet} tick={tick} aiEnabled={aiEnabled} />,
