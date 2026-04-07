@@ -1,207 +1,138 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { generateFleet, ROUTES, interpolateRoute } from "./data/fleet";
+import { useProjectState } from "./hooks/useProjectState";
 import DashboardTab from "./tabs/DashboardTab";
 import DataTab from "./tabs/DataTab";
 import ChartTab from "./tabs/ChartTab";
 import SpreadsheetTab from "./tabs/SpreadsheetTab";
-import FileTab from "./tabs/FileTab";
 import FleetTableTab from "./tabs/FleetTableTab";
-import PipelineTab from "./tabs/PipelineTab";
-import { generateFleet, tickFleet } from "./data/fleet";
+import FileTab from "./tabs/FileTab";
+import ChartBuilder from "./components/chart-builder/ChartBuilder";
 
-// ── SVG Logo ──
 const R64Logo = () => (
-  <svg width="70" height="16" viewBox="0 0 70 16">
-    <text x="0" y="13" fill="#0078D4" fontFamily="'Segoe UI',system-ui" fontSize="13" fontWeight="900" letterSpacing="-0.5">Row64</text>
+  <svg width="28" height="20" viewBox="0 0 28 20">
+    <rect width="28" height="20" rx="3" fill="#0078D4" />
+    <text x="4" y="15" fontFamily="Arial Black,sans-serif" fontSize="13" fontWeight="900" fill="white">64</text>
   </svg>
 );
 
-// ── AI Toggle ──
-function AIToggle({ enabled, onChange }) {
-  return (
-    <button onClick={() => onChange(!enabled)} title={enabled ? "AI ON" : "AI OFF"}
-      style={{ display: "flex", alignItems: "center", gap: 5, background: enabled ? "#dcfce7" : "#f1f5f9",
-        border: `1px solid ${enabled ? "#86efac" : "#e2e8f0"}`, borderRadius: 14, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600,
-        color: enabled ? "#16a34a" : "#94a3b8", transition: "all 0.2s" }}>
-      <div style={{ width: 8, height: 8, borderRadius: "50%", background: enabled ? "#22c55e" : "#cbd5e1" }} />
-      AI
-    </button>
-  );
-}
-
-// ── Navigation structure ──
-const NAV = [
-  {
-    id: "fleet", label: "Fleet Demo", icon: "🚛",
-    children: [
-      { id: "fleet-dashboard", label: "Dashboard" },
-      { id: "fleet-map", label: "Fleet Table" },
-      { id: "fleet-data", label: "Data" },
-      { id: "fleet-chart", label: "Chart" },
-      { id: "fleet-spreadsheet", label: "Spreadsheet" },
-    ],
-  },
-  {
-    id: "pipeline", label: "Sales Pipeline Demo", icon: "📊",
-    children: [
-      { id: "pipeline-overview", label: "Pipeline Overview" },
-    ],
-  },
-  {
-    id: "files", label: "File Manager", icon: "📁",
-    children: [
-      { id: "file-browser", label: "Browse" },
-    ],
-  },
-];
+const AIToggle = ({ enabled, onChange }) => (
+  <div onClick={() => onChange(!enabled)}
+    style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "3px 10px", borderRadius: 20, background: enabled ? "rgba(16,185,129,0.1)" : "rgba(107,114,128,0.08)", border: `1px solid ${enabled ? "#86efac" : "#e5e7eb"}`, transition: "all 0.25s ease", userSelect: "none" }}>
+    <div style={{ width: 30, height: 16, borderRadius: 8, position: "relative", background: enabled ? "#10b981" : "#d1d5db", transition: "background 0.2s ease" }}>
+      <div style={{ position: "absolute", top: 2, left: enabled ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.2s ease" }} />
+    </div>
+    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", color: enabled ? "#10b981" : "#9ca3af", transition: "color 0.2s ease" }}>
+      AI {enabled ? "ON" : "OFF"}
+    </span>
+  </div>
+);
 
 export default function App() {
   const queryClient = useQueryClient();
-  const [fleet, setFleet] = useState(() => generateFleet(24));
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [activeId, setActiveId] = useState("fleet-dashboard");
-  const [expandedCats, setExpandedCats] = useState(["fleet", "pipeline"]);
-  const [search, setSearch] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const project = useProjectState();
+  const [fleet, setFleet] = useState(generateFleet);
+  const [activeTab, setActiveTab] = useState("Dashboard");
+  const [tick, setTick] = useState(0);
+  const [aiEnabled, setAiEnabled] = useState(true);
 
-  // Fleet animation
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        project.saveProject();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        project.newProject();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "o") {
+        e.preventDefault();
+        setActiveTab("File");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [project]);
+
+  // Animate fleet
   useEffect(() => {
     const iv = setInterval(() => {
+      setTick((t) => t + 1);
       setFleet((prev) => {
-        const next = tickFleet(prev);
-        queryClient.setQueryData(["fleet"], next);
+        const next = prev.map((v) => {
+          if (v.speed === 0) return v;
+          let np = v.progress + v.speed;
+          if (np >= 1) np = 0.05;
+          const [nLng, nLat] = interpolateRoute(ROUTES[v.routeIdx], np);
+          const heading = Math.atan2(nLng - v.lng, nLat - v.lat) * (180 / Math.PI);
+          return { ...v, progress: np, lat: nLat, lng: nLng, heading, waypointIndex: Math.floor(np * 10000) };
+        });
+        queryClient.setQueryData(["r64", "fleet", "telemetry"], next);
         return next;
       });
-    }, 2000);
+    }, 100);
     return () => clearInterval(iv);
   }, [queryClient]);
 
-  const toggleCat = useCallback((catId) => {
-    setExpandedCats(prev => prev.includes(catId) ? prev.filter(x => x !== catId) : [...prev, catId]);
-  }, []);
-
-  // Filter nav by search
-  const filteredNav = useMemo(() => {
-    if (!search.trim()) return NAV;
-    const q = search.toLowerCase();
-    return NAV.map(cat => ({
-      ...cat,
-      children: cat.children.filter(c => c.label.toLowerCase().includes(q) || cat.label.toLowerCase().includes(q)),
-    })).filter(cat => cat.children.length > 0);
-  }, [search]);
-
-  // Resolve active tab to component
-  const tabContent = useMemo(() => {
-    const map = {
-      "fleet-dashboard": <DashboardTab fleet={fleet} aiEnabled={aiEnabled} />,
-      "fleet-map": <FleetTableTab />,
-      "fleet-data": <DataTab />,
-      "fleet-chart": <ChartTab />,
-      "fleet-spreadsheet": <SpreadsheetTab />,
-      "pipeline-overview": <PipelineTab />,
-      "file-browser": <FileTab />,
-    };
-    return map[activeId] || <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8" }}>Select a view</div>;
-  }, [activeId, fleet, aiEnabled]);
-
-  // Find breadcrumb
-  const breadcrumb = useMemo(() => {
-    for (const cat of NAV) {
-      const child = cat.children.find(c => c.id === activeId);
-      if (child) return `${cat.label} › ${child.label}`;
-    }
-    return "";
-  }, [activeId]);
+  const tabs = {
+    File: <FileTab project={project} />,
+    Data: <DataTab onMarkDirty={project.markDirty} />,
+    Chart: <ChartTab onMarkDirty={project.markDirty} />,
+    "Chart Builder": <ChartBuilder onMarkDirty={project.markDirty} />,
+    Spreadsheet: <SpreadsheetTab onMarkDirty={project.markDirty} />,
+    "Fleet Table": <FleetTableTab fleet={fleet} />,
+    Dashboard: <DashboardTab fleet={fleet} tick={tick} aiEnabled={aiEnabled} />,
+  };
 
   return (
-    <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column",
-      fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif", overflow: "hidden", background: "#f0f2f5", color: "#1e293b" }}>
-
-      {/* ── Title Bar ── */}
-      <div style={{ height: 32, background: "#1e1e2e", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 12px", color: "#a0a0b8", fontSize: 12, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <R64Logo />
-          <span style={{ fontSize: 11, color: "#8888a0" }}>Row64 Studio</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", background: "#f0f2f5", fontFamily: "'Segoe UI',-apple-system,sans-serif", overflow: "hidden", color: "#1a1a2e" }}>
+      {/* Title Bar */}
+      <div style={{ height: 32, background: "#1e1e2e", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", fontSize: 12, flexShrink: 0 }}>
+        <R64Logo />
+        <span style={{ color: "#8888a0" }}>
+          Row64 - {project.projectName}{project.isDirty ? " •" : ""} (TanStack)
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <div style={{ padding: "2px 10px", background: "#10b981", borderRadius: 3, color: "#fff", fontSize: 10, fontWeight: 700 }}>localhost</div>
+          <span style={{ color: "#555", marginLeft: 8 }}>⌄</span>
+          <span style={{ color: "#555" }}>∧</span>
+          <span style={{ color: "#555" }}>✕</span>
         </div>
       </div>
-
-      {/* ── Main Layout: Sidebar + Content ── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Sidebar */}
-        <div style={{ width: sidebarCollapsed ? 48 : 220, background: "#fff", borderRight: "1px solid #e2e8f0",
-          display: "flex", flexDirection: "column", flexShrink: 0, transition: "width 0.2s" }}>
-          {/* Sidebar header */}
-          <div style={{ padding: sidebarCollapsed ? "10px 8px" : "12px 14px", borderBottom: "1px solid #e2e8f0",
-            display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            {!sidebarCollapsed && <span style={{ fontSize: 12, fontWeight: 800, color: "#0078D4", letterSpacing: "0.02em" }}>DEMO ASSETS</span>}
-            <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#94a3b8", padding: "2px 4px" }}>
-              {sidebarCollapsed ? "▸" : "◂"}
-            </button>
+      {/* Menu Bar */}
+      <div style={{ height: 30, background: "#2a2a3e", display: "flex", alignItems: "center", padding: "0 8px", flexShrink: 0, borderBottom: "1px solid #3a3a52" }}>
+        {Object.keys(tabs).map((t) => (
+          <button key={t} onClick={() => setActiveTab(t)} style={{
+            background: activeTab === t ? "#3a3a56" : "transparent",
+            border: "none", color: activeTab === t ? "#fff" : "#9898b0",
+            padding: "4px 14px", fontSize: 12, cursor: "pointer", borderRadius: 2,
+            fontWeight: activeTab === t ? 600 : 400, transition: "all 0.15s",
+          }}>{t}</button>
+        ))}
+      </div>
+      {/* Toolbar */}
+      <div style={{ height: 38, background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", flexShrink: 0, borderBottom: "1px solid #e0e0e8", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <div style={{ background: "#0078D4", color: "#fff", padding: "4px 12px", borderRadius: 3, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", marginRight: 10 }}>
+            {activeTab.toUpperCase()}
           </div>
-          {/* Search */}
-          {!sidebarCollapsed && (
-            <div style={{ padding: "8px 14px" }}>
-              <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6,
-                  fontSize: 11, outline: "none", background: "#f8fafc", boxSizing: "border-box" }} />
-            </div>
-          )}
-          {/* Nav items */}
-          <div style={{ flex: 1, overflow: "auto", padding: "4px 0" }}>
-            {filteredNav.map(cat => (
-              <div key={cat.id}>
-                <button onClick={() => toggleCat(cat.id)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: sidebarCollapsed ? "8px 12px" : "8px 14px",
-                    background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#334155",
-                    textAlign: "left" }}>
-                  <span style={{ fontSize: 14 }}>{cat.icon}</span>
-                  {!sidebarCollapsed && (
-                    <>
-                      <span style={{ flex: 1 }}>{cat.label}</span>
-                      <span style={{ fontSize: 10, color: "#94a3b8", transform: expandedCats.includes(cat.id) ? "rotate(90deg)" : "none",
-                        transition: "transform 0.15s" }}>▸</span>
-                    </>
-                  )}
-                </button>
-                {!sidebarCollapsed && expandedCats.includes(cat.id) && cat.children.map(child => (
-                  <button key={child.id} onClick={() => setActiveId(child.id)}
-                    style={{ width: "100%", display: "block", padding: "6px 14px 6px 38px", background: activeId === child.id ? "#eff6ff" : "none",
-                      border: "none", cursor: "pointer", fontSize: 12, color: activeId === child.id ? "#0078D4" : "#64748b",
-                      fontWeight: activeId === child.id ? 600 : 400, textAlign: "left", borderLeft: activeId === child.id ? "3px solid #0078D4" : "3px solid transparent",
-                      transition: "all 0.1s" }}>
-                    {child.label}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
+          {["New", "Browse", "Publish"].map((l) => (
+            <button key={l} onClick={() => {
+              if (l === "New") { project.newProject(); setActiveTab("File"); }
+            }} style={{ background: "transparent", border: "none", color: "#444", padding: "4px 10px", fontSize: 11, cursor: "pointer", fontWeight: 500 }}>{l}</button>
+          ))}
         </div>
-
-        {/* Content area */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {/* Toolbar */}
-          <div style={{ height: 38, background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "0 14px", flexShrink: 0, borderBottom: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ background: "#0078D4", color: "#fff", padding: "3px 12px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
-                Row64 Studio
-              </div>
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>{breadcrumb}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <AIToggle enabled={aiEnabled} onChange={setAiEnabled} />
-            </div>
-          </div>
-          {/* Tab content */}
-          <div style={{ flex: 1, overflow: "hidden", background: "#eceef2" }}>
-            {tabContent}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <AIToggle enabled={aiEnabled} onChange={setAiEnabled} />
+          <button onClick={() => setActiveTab("File")} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "#888", padding: "2px 6px" }}>⚙</button>
         </div>
+      </div>
+      {/* Tab Content */}
+      <div style={{ flex: 1, padding: 12, overflow: "hidden", background: "#eceef2" }}>
+        {tabs[activeTab]}
       </div>
     </div>
   );
