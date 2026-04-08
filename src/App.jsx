@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { generateFleet, ROUTES, interpolateRoute } from "./data/fleet";
 import { generateWaterData } from "./data/water";
@@ -41,6 +41,20 @@ export default function App() {
   const [tick, setTick] = useState(0);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [sidebarSections, setSidebarSections] = useState({ fleet: true, water: true });
+  const [dataMenuOpen, setDataMenuOpen] = useState(false);
+  const dataMenuRef = useRef(null);
+
+  // Close the Data dropdown on outside click
+  useEffect(() => {
+    if (!dataMenuOpen) return;
+    const onDocClick = (e) => {
+      if (dataMenuRef.current && !dataMenuRef.current.contains(e.target)) {
+        setDataMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [dataMenuOpen]);
 
   // Seed the water work order dataset into the react-query cache so
   // WaterDashboardTab / WaterTableTab / WaterChartBuilder can all read it.
@@ -149,14 +163,107 @@ export default function App() {
       </div>
       {/* Menu Bar */}
       <div style={{ height: 30, background: "#2a2a3e", display: "flex", alignItems: "center", padding: "0 8px", flexShrink: 0, borderBottom: "1px solid #3a3a52" }}>
-        {Object.keys(tabs).map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            background: activeTab === t ? "#3a3a56" : "transparent",
-            border: "none", color: activeTab === t ? "#fff" : "#9898b0",
-            padding: "4px 14px", fontSize: 12, cursor: "pointer", borderRadius: 2,
-            fontWeight: activeTab === t ? 600 : 400, transition: "all 0.15s",
-          }}>{t}</button>
-        ))}
+        {["File", "Data", "Spreadsheet"].map((t) => {
+          if (t === "Data") {
+            const dataSubTabs = [
+              { tab: "Data", label: "Data View" },
+              { tab: "Chart", label: "Chart" },
+              { tab: "Chart Builder", label: "Chart Builder" },
+            ];
+            const isDataActive = dataSubTabs.some((s) => s.tab === activeTab);
+            return (
+              <div key={t} ref={dataMenuRef} style={{ position: "relative" }}>
+                <button
+                  onClick={() => setDataMenuOpen((o) => !o)}
+                  style={{
+                    background: isDataActive || dataMenuOpen ? "#3a3a56" : "transparent",
+                    border: "none",
+                    color: isDataActive ? "#fff" : "#9898b0",
+                    padding: "4px 14px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    borderRadius: 2,
+                    fontWeight: isDataActive ? 600 : 400,
+                    transition: "all 0.15s",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  Data
+                  <span style={{ fontSize: 9, opacity: 0.8 }}>▾</span>
+                </button>
+                {dataMenuOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      marginTop: 2,
+                      minWidth: 148,
+                      background: "#2a2a3e",
+                      border: "1px solid #3a3a52",
+                      borderRadius: 3,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                      padding: "4px 0",
+                      zIndex: 100,
+                    }}
+                  >
+                    {dataSubTabs.map((sub) => {
+                      const subActive = activeTab === sub.tab;
+                      return (
+                        <div
+                          key={sub.tab}
+                          onClick={() => {
+                            setActiveTab(sub.tab);
+                            setDataMenuOpen(false);
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "#3a3a56";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "transparent";
+                          }}
+                          style={{
+                            padding: "6px 14px",
+                            fontSize: 12,
+                            color: subActive ? "#fff" : "#9898b0",
+                            cursor: "pointer",
+                            fontWeight: subActive ? 600 : 400,
+                            userSelect: "none",
+                            transition: "background 0.15s",
+                          }}
+                        >
+                          {sub.label}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          const active = activeTab === t;
+          return (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              style={{
+                background: active ? "#3a3a56" : "transparent",
+                border: "none",
+                color: active ? "#fff" : "#9898b0",
+                padding: "4px 14px",
+                fontSize: 12,
+                cursor: "pointer",
+                borderRadius: 2,
+                fontWeight: active ? 600 : 400,
+                transition: "all 0.15s",
+              }}
+            >
+              {t}
+            </button>
+          );
+        })}
       </div>
       {/* Toolbar */}
       <div style={{ height: 38, background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", flexShrink: 0, borderBottom: "1px solid #e0e0e8", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
