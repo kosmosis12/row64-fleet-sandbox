@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { generateFleet, ROUTES, interpolateRoute } from "./data/fleet";
+import { generateWaterData } from "./data/water";
 import { useProjectState } from "./hooks/useProjectState";
 import DashboardTab from "./tabs/DashboardTab";
 import DataTab from "./tabs/DataTab";
@@ -9,6 +10,9 @@ import SpreadsheetTab from "./tabs/SpreadsheetTab";
 import FleetTableTab from "./tabs/FleetTableTab";
 import FileTab from "./tabs/FileTab";
 import ChartBuilder from "./components/chart-builder/ChartBuilder";
+import WaterDashboardTab from "./tabs/WaterDashboardTab";
+import WaterTableTab from "./tabs/WaterTableTab";
+import WaterChartBuilder from "./components/water-chart-builder/WaterChartBuilder";
 
 const R64Logo = () => (
   <svg width="28" height="20" viewBox="0 0 28 20">
@@ -36,6 +40,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [tick, setTick] = useState(0);
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [sidebarSections, setSidebarSections] = useState({ fleet: true, water: true });
+
+  // Seed the water work order dataset into the react-query cache so
+  // WaterDashboardTab / WaterTableTab / WaterChartBuilder can all read it.
+  useEffect(() => {
+    if (!queryClient.getQueryData(["r64", "water", "workorders"])) {
+      queryClient.setQueryData(["r64", "water", "workorders"], generateWaterData());
+    }
+  }, [queryClient]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -85,7 +98,39 @@ export default function App() {
     Spreadsheet: <SpreadsheetTab onMarkDirty={project.markDirty} />,
     "Fleet Table": <FleetTableTab fleet={fleet} />,
     Dashboard: <DashboardTab fleet={fleet} tick={tick} aiEnabled={aiEnabled} />,
+    "Water Dashboard": <WaterDashboardTab />,
+    "Water Orders": <WaterTableTab />,
+    "Water Chart Builder": <WaterChartBuilder onMarkDirty={project.markDirty} />,
   };
+
+  const demoSections = [
+    {
+      key: "fleet",
+      label: "Fleet Demo",
+      accent: "#0078D4",
+      items: [
+        { tab: "Dashboard", label: "Dashboard" },
+        { tab: "Fleet Table", label: "Fleet Table" },
+        { tab: "Data", label: "Data" },
+        { tab: "Chart", label: "Chart" },
+        { tab: "Chart Builder", label: "Chart Builder" },
+        { tab: "Spreadsheet", label: "Spreadsheet" },
+      ],
+    },
+    {
+      key: "water",
+      label: "Water Utilities",
+      accent: "#06b6d4",
+      items: [
+        { tab: "Water Dashboard", label: "Dashboard" },
+        { tab: "Water Orders", label: "Work Orders" },
+        { tab: "Water Chart Builder", label: "Chart Builder" },
+      ],
+    },
+  ];
+
+  const toggleSection = (k) =>
+    setSidebarSections((prev) => ({ ...prev, [k]: !prev[k] }));
 
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", background: "#f0f2f5", fontFamily: "'Segoe UI',-apple-system,sans-serif", overflow: "hidden", color: "#1a1a2e" }}>
@@ -130,9 +175,95 @@ export default function App() {
           <button onClick={() => setActiveTab("File")} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "#888", padding: "2px 6px" }}>⚙</button>
         </div>
       </div>
-      {/* Tab Content */}
-      <div style={{ flex: 1, padding: 12, overflow: "hidden", background: "#eceef2" }}>
-        {tabs[activeTab]}
+      {/* Sidebar + Tab Content */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0, background: "#eceef2" }}>
+        {/* Demo Assets sidebar */}
+        <div
+          style={{
+            width: 188,
+            flexShrink: 0,
+            background: "#ffffff",
+            borderRight: "1px solid #e0e0e8",
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 12px 6px",
+              fontSize: 9,
+              fontWeight: 800,
+              color: "#888",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+            }}
+          >
+            Demo Assets
+          </div>
+          {demoSections.map((section) => {
+            const expanded = sidebarSections[section.key];
+            const activeInSection = section.items.some((it) => it.tab === activeTab);
+            return (
+              <div key={section.key} style={{ marginBottom: 4 }}>
+                <div
+                  onClick={() => toggleSection(section.key)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: activeInSection ? "#1a1a2e" : "#444",
+                    background: activeInSection ? "#f1f5fb" : "transparent",
+                    borderLeft: `3px solid ${activeInSection ? section.accent : "transparent"}`,
+                    userSelect: "none",
+                  }}
+                >
+                  <span style={{ fontSize: 9, color: "#888", width: 8 }}>
+                    {expanded ? "▾" : "▸"}
+                  </span>
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 2,
+                      background: section.accent,
+                    }}
+                  />
+                  {section.label}
+                </div>
+                {expanded &&
+                  section.items.map((item) => {
+                    const active = activeTab === item.tab;
+                    return (
+                      <div
+                        key={item.tab}
+                        onClick={() => setActiveTab(item.tab)}
+                        style={{
+                          padding: "5px 12px 5px 34px",
+                          fontSize: 11,
+                          color: active ? "#0078D4" : "#555",
+                          background: active ? "#e8f1fb" : "transparent",
+                          borderLeft: `3px solid ${active ? "#0078D4" : "transparent"}`,
+                          cursor: "pointer",
+                          fontWeight: active ? 700 : 500,
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                    );
+                  })}
+              </div>
+            );
+          })}
+        </div>
+        {/* Tab Content */}
+        <div style={{ flex: 1, padding: 12, overflow: "hidden", minWidth: 0 }}>
+          {tabs[activeTab]}
+        </div>
       </div>
     </div>
   );
