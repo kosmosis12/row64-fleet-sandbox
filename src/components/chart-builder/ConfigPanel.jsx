@@ -1,4 +1,4 @@
-import { COLUMN_DEFS } from "./useChartData";
+import { COLUMN_DEFS as FLEET_COLUMN_DEFS } from "./useChartData";
 
 const CHART_TYPES = [
   { id: "bar", label: "Bar" },
@@ -13,9 +13,9 @@ const labelStyle = { fontSize: 10, fontWeight: 700, color: "#666", letterSpacing
 const inputStyle = { width: "100%", padding: "5px 8px", background: "#ffffff", border: "1px solid #d0d0dc", borderRadius: 3, fontSize: 11, color: "#1a1a2e", boxSizing: "border-box" };
 const sectionStyle = { padding: "10px 12px", borderBottom: "1px solid #e0e0e8" };
 
-const colDef = (k) => COLUMN_DEFS.find((c) => c.key === k);
-
-export default function ConfigPanel({ config, setConfig, columnValues }) {
+export default function ConfigPanel({ config, setConfig, columnValues, columnDefs }) {
+  const COLUMN_DEFS = columnDefs || FLEET_COLUMN_DEFS;
+  const colDef = (k) => COLUMN_DEFS.find((c) => c.key === k);
   const update = (patch) => setConfig({ ...config, ...patch });
 
   const addFilter = () => {
